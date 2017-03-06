@@ -8,7 +8,8 @@ var express = require('express'),
     extend = require('util')._extend,
     dns = require('dns'),
     jwt = require('jsonwebtoken'),
-    cors = require('cors');
+    cors = require('cors'),
+    moment = require('moment');
 
 var app = express();
 var ad = {};
@@ -73,16 +74,13 @@ app.post('/adlogin', function(req, res) {
             GetAppUser(username, function(error, users) {
                 if (users.length > 0 && !error) {
                     
-                    var logged_in_time = new Date();
-                    var utcDate = logged_in_time.toUTCString();
-                    
                     var payload = { 
                         id: users[0].id,
                         username: users[0].username, 
                         email: users[0].email,
                         role: users[0].role,
                         verified: users[0].verified,
-                        logged_in_time: utcDate
+                        logged_in_time: moment().format("YYYY-MM-DDTHH:mm:ss.SSS")
                     };
 
                     jwt.sign(payload, serverConfig.app_rest_jwt_secret, {}, function(err, result) {                            
