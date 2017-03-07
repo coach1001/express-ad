@@ -2,14 +2,24 @@
 	"app_rest_host"									: "localhost",		
 	"app_rest_port"									:  3003,		
 	"app_rest_create_ldap_user_url"	: "/rpc/create_ad_user",
+	"app_rest_update_ldap_email_url": "/rpc/update_ad_user_email",
 	"app_rest_get_ldap_users_url"		: "/ad_users",		
 	"app_rest_login_url" 						: "/rpc/login",	
 	"app_rest_signup_role"					: "anon",
 	"app_rest_jwt_secret"						: "lab_calc_soft_dot_pta_only",
 		
+	"app_ldap_ssl"									: false,
+	"app_ldapbind_user"							: "fweber@fhr.org.za",
+	"app_ldapbind_password"					: "Soulreaver1",
 	"app_dbldap_user"								: "ldap_utility",
 	"app_dbldap_password"						: "rnjj4We9Zdc3erMBB4JFyeP",	
 	"app_ldap_host" 								: "gpr-ad.fhr.org.za",
 	"app_ldap_base_dn" 							: "DC=fhr,DC=org,DC=za",
-	"app_ldap_domain_suffix" 				: "@fhr.org.za"	
+	"app_ldap_domain_suffix" 				: "@fhr.org.za",	
+	"app_ldap_groups_role_mapping"	: [ 
+		{"group": "FHRAllstaff", "role": "super"},
+		{"group": "G2", "role": "super"},
+		{"group": "G3", "role": "super"},
+		{"group": "G4", "role": "super"}
+	] 
 }

@@ -26,42 +26,61 @@ var appLogin_OPT = {
 
 var appRequest_OPT = {};
 
-var authResponses = {
-    
-    invalidCredentials: {
-        code: 49,
-        status: -1,
-        description: 'Authentication Failed, Invalid Credentials'
-    },
-    ldapServerError: {
-        code: "ENETUNREACH",
-        status: -2,
-        description: 'Authentication Failed, LDAP Server Offline'
-    }
-};
-
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 app.use(cors());
 
 app.get('/', function(req, res) {});
 
+app.get('/groupusers/:index', function(req, res) {
+    var app_groups = serverConfig.app_ldap_groups_role_mapping;
+    var ad_group = '';
+    var group_users = [];
+
+    app_groups.map( function (group, index){
+        console.log(parseInt(req.params.index,10),index);
+        if(parseInt(req.params.index,10) === index){            
+            if(ad_group === ''){            
+                ad_group = group.group;    
+            }            
+        }
+        return group;
+    });
+
+    ad.getUsersForGroup(ad_group, function(err, users) {
+      if (err) {
+        console.log('ERROR: ' +JSON.stringify(err));
+        return;
+      }
+
+      if (! users) console.log('Group: ' + ad_group + ' not found.');
+      else {
+        users.map( function(user){
+            group_users.push({value: user.sAMAccountName, label: user.displayName, email: user.mail});
+            return user;
+        });
+        res.json(group_users);
+      }
+    });
+
+});
+
 app.post('/adlogin', function(req, res) {
 
     var username = req.body.email;
     var password = req.body.pass;    
-    var email = '';
+    var username_fqdn = '';
     
     
     if(username.split('@')[1]){
-        email = username;
+        username_fqdn = username;
         username = username.split('@')[0];        
     }else{
-        email = username+serverConfig.app_ldap_domain_suffix;
+        username_fqdn = username+serverConfig.app_ldap_domain_suffix;
     }
 
     
-    ad.authenticate(email, password, function(err, auth) {
+    ad.authenticate(username_fqdn, password, function(err, auth) {
 
         if (err) {
             if (err.code === 49) {
@@ -70,79 +89,132 @@ app.post('/adlogin', function(req, res) {
                 res.status(501).json({message: 'AD Server Error, Contact Administrator'});
             }
         } else if (auth) { //LDAP Auth Successfull																	
+            var groups_ = [];
+            var app_groups = serverConfig.app_ldap_groups_role_mapping;
+            var role = '';
+            var user = {};
+            
+            ad.findUser(username_fqdn, function(err, user) {//FIND USER
+                //console.log(user);
 
-            GetAppUser(username, function(error, users) {
-                if (users.length > 0 && !error) {
+                ad.getGroupMembershipForUser(username_fqdn, function(err, groups) {//GET GROUPS                    
                     
-                    var payload = { 
-                        id: users[0].id,
-                        username: users[0].username, 
-                        email: users[0].email,
-                        role: users[0].role,
-                        verified: users[0].verified,
-                        logged_in_time: moment().format("YYYY-MM-DDTHH:mm:ss.SSS")
-                    };
-
-                    jwt.sign(payload, serverConfig.app_rest_jwt_secret, {}, function(err, result) {                            
-                        if(err){
-                            res.status(500).json({message: 'JWT Creation Error, Contact Administrator'});          
-                        }else{                            
-                            res.json({token: result});    
-                        }                                    
-                    });
-
-                } else if(!error){
+                    if (err) {//ROLE 
+                        console.log('ERROR: ' +JSON.stringify(err));
+                        return;
+                    }
+                    if (! groups){                
+                        console.log('User: ' + email + ' not found.');
+                    }                  
+                    else{                                            
+                        groups.map( function(g){
+                            app_groups.map(function(ap){                            
+                                if(g.cn === ap.group){                                
+                                    if(role === ''){
+                                        role = ap.role;
+                                    }
+                                }
+                                return ap;
+                            });
+                            return g;
+                        });                    
+                    }//ROLE        
                     
-                    console.log('Creating...');
-
-                    CreateAppADUser({username:username, email: email, role: serverConfig.app_rest_signup_role}, function(error,user) {                        
-                        
-                        
-                        if(error){
-                            res.status(500).json({message: 'Rest API Service Error, Contact Administrator'});
-                        }else{
-                            var payload = { 
-                                    id: user.id,
-                                    username: user.username, 
-                                    email: user.email,
-                                    role_: serverConfig.app_rest_signup_role
-                                };
-
-                                jwt.sign(payload, serverConfig.app_rest_jwt_secret, {}, function(err, result) {                            
+                    if(role === ''){
+                        res.status(401).json({message:'You are not Authorized to use this Application'});
+                    }
+                    else {    
+                            GetAppUser(username, function(error, users) {//CREATE OR LOGIN
+                            
+                            if (users.length > 0 && !error) {//LOGIN
+                                UpdateAppADUserEmail({username: users[0].username, email: user.mail},function(err,result){
                                     if(err){
-                                        res.status(500).json({message: 'JWT Creation Error, Contact Administrator'});          
+                                        res.status(500).json({message: 'Rest API Service Error, Contact Administrator'});
                                     }else{
-                                        res.json({token: result});    
-                                    }                                    
-                                });
+                                        var payload = {                         
+                                            username: users[0].username, 
+                                            email: user.mail,                            
+                                            role: role,
+                                            verified: users[0].verified,
+                                            logged_in_time: moment().format("YYYY-MM-DDTHH:mm:ss.SSS")
+                                        };
+
+                                        jwt.sign(payload, serverConfig.app_rest_jwt_secret, {}, function(err, result) {                            
+                                            if(err){
+                                                res.status(500).json({message: 'JWT Creation Error, Contact Administrator'});          
+                                            }else{                            
+                                                res.json({token: result});    
+                                            }                                    
+                                        });
+                                    }                            
+                                
+                                });                        
+                                                                   
+                            } else if(!error){//CREATE                                                                        
+                                CreateAppADUser({username:username, email: user.mail, role: role}, function(error,user_) {                                                                            
+                                    if(error){
+                                        res.status(500).json({message: 'Rest API Service Error, Contact Administrator'});
+                                    }else{
+                                        var payload = {                                     
+                                                username: user_[0].username, 
+                                                email: user_[0].email,                                                                            
+                                                role: role,
+                                                verified: user_[0].verified,
+                                                logged_in_time: moment().format("YYYY-MM-DDTHH:mm:ss.SSS")
+                                            };
+
+                                            jwt.sign(payload, serverConfig.app_rest_jwt_secret, {}, function(err, result) {                            
+                                                if(err){
+                                                    res.status(500).json({message: 'JWT Creation Error, Contact Administrator'});          
+                                                }else{
+                                                    res.json({token: result});    
+                                                }                                    
+                                            });
+                                        }
+                                })
+                                
+
+                            } else if(error){
+                                res.status(500).json({message: 'Rest API Service Error, Contact Administrator'});
                             }
-                    })
-                    
 
-                } else if(error){
-                    res.status(500).json({message: 'Rest API Service Error, Contact Administrator'});
-                }
-            })
+                        })//CREATE OR LOGIN
+                    }
+                });//GET GROUPS
+            })//FIND USER
 
-
-        } else { //LDAP Auth Failed
+        }else{ //LDAP Auth Failed
             res.status(401).json(authResponses.invalidCredentials);
-        }
+        }    
     });
 
 });
 
-var CreateAppADUser = function(data, callback) {
+var UpdateAppADUserEmail = function(data, callback) {
 
     var appRequest_OPT_ = extend({}, appRequest_OPT);
-    appRequest_OPT_.url = appRequest_OPT_.url + serverConfig.app_rest_create_ldap_user_url;
-    appRequest_OPT_.json = { username: data.username, email: data.email, role_: data.role };
+    appRequest_OPT_.url = appRequest_OPT_.url + serverConfig.app_rest_update_ldap_email_url;
+    appRequest_OPT_.json = { username_: data.username, email_: data.email};
 
     request.post(appRequest_OPT_, function(err, res, body) {
-        if (err) {
+        if (err) {                        
             callback(true,[])
-        } else {
-            console.log(body);
+        } else {            
+            callback(false,body);
+        }
+    });
+};
+
+var CreateAppADUser = function(data, callback) {
+    console.log(data);
+    var appRequest_OPT_ = extend({}, appRequest_OPT);
+    appRequest_OPT_.url = appRequest_OPT_.url + serverConfig.app_rest_create_ldap_user_url;
+    appRequest_OPT_.json = { username_: data.username, email_: data.email, role_: data.role };
+
+    request.post(appRequest_OPT_, function(err, res, body) {
+        if (err) {                        
+            callback(true,[])
+        } else {            
             callback(false,body);
         }
     });
@@ -225,6 +297,9 @@ var InitializeServer = function() {
 
         adConfig.url = 'ldap://' + result;
         adConfig.baseDN = serverConfig.app_ldap_base_dn;
+        adConfig.username = serverConfig.app_ldapbind_user;
+        adConfig.password = serverConfig.app_ldapbind_password;
+
         ad = new ActiveDirectory(adConfig);
 
         aResolveServers_r(serverConfig.app_rest_host, function(result_) {
