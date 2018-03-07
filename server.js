@@ -96,9 +96,9 @@ app.post('/adlogin', function(req, res) {
             
             ad.findUser(username_fqdn, function(err, user) {//FIND USER
                 //console.log(user);
-
+                console.log(user);
                 ad.getGroupMembershipForUser(username_fqdn, function(err, groups) {//GET GROUPS                    
-                    
+                    console.log(groups);
                     if (err) {//ROLE 
                         console.log('ERROR: ' +JSON.stringify(err));
                         return;
